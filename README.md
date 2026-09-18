@@ -250,7 +250,13 @@ Test progressively rather than connecting everything at once:
 
 ## Circuit diagram
 
-![LPG Security System circuit](docs/LPG_SYSTEM_ARCHITECTURE.svg)
+### Detailed circuit diagram
+
+![LPG Security System circuit diagram](docs/CIRCUIT_DIAGRAM.svg)
+
+### System architecture
+
+![LPG Security System architecture](docs/LPG_SYSTEM_ARCHITECTURE.svg)
 
 ## Safety and limitations
 
