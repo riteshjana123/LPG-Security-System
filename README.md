@@ -262,11 +262,23 @@ Test progressively rather than connecting everything at once:
 
 ### Detailed circuit diagram
 
-![LPG Security System circuit diagram](docs/CIRCUIT_DIAGRAM.svg)
+![LPG Security System circuit diagram](docs/LPG_FINAL_SYSTEM.png)
 
-### System architecture
+The editable/clean repository diagrams are also available as [CIRCUIT_DIAGRAM.svg](docs/CIRCUIT_DIAGRAM.svg) and [LPG_SYSTEM_ARCHITECTURE.svg](docs/LPG_SYSTEM_ARCHITECTURE.svg).
 
-![LPG Security System architecture](docs/LPG_SYSTEM_ARCHITECTURE.svg)
+### System flowchart
+
+![LPG Security System flowchart](docs/flowchart.png)
+
+A scalable vector version is available at [FLOWCHART.svg](docs/FLOWCHART.svg).
+
+## Documentation
+
+- [Research-Style Technical Report](docs/RESEARCH_REPORT.md)
+- [Blynk Setup](docs/BLYNK_SETUP.md)
+- [Circuit Notes](docs/CIRCUIT_NOTES.md)
+- [Testing Guide](docs/TESTING.md)
+- [Release Notes — v1.0.0](docs/RELEASE_NOTES_v1.0.0.md)
 
 ## Safety and limitations
 
@@ -278,6 +290,12 @@ This project is a **prototype/academic embedded-systems project**, not a certifi
 - The local ESP32 logic is intentionally independent of Blynk/Wi-Fi.
 - For real-world deployment, use certified gas/fire detection equipment and appropriate safety engineering.
 
+## Release
+
+Current project version: **v1.0.0**
+
+See [v1.0.0 Release Notes](docs/RELEASE_NOTES_v1.0.0.md) and [CHANGELOG](CHANGELOG.md).
+
 ## Repository structure
 
 ~~~text
@@ -285,11 +303,20 @@ LPG-Security-System/
 ├── LPG-Security-System.ino
 ├── README.md
 ├── LICENSE
+├── VERSION
+├── CHANGELOG.md
 ├── config.h.example
 ├── .gitignore
 └── docs/
     ├── BLYNK_SETUP.md
-    └── LPG_FINAL_SYSTEM.svg
+    ├── CIRCUIT_DIAGRAM.svg
+    ├── CIRCUIT_NOTES.md
+    ├── FLOWCHART.svg
+    ├── LPG_FINAL_SYSTEM.png
+    ├── LPG_SYSTEM_ARCHITECTURE.svg
+    ├── RELEASE_NOTES_v1.0.0.md
+    ├── RESEARCH_REPORT.md
+    └── TESTING.md
 ~~~
 
 ## License
