@@ -1932,14 +1932,15 @@ void maintainConnections()
 
     if (
         eventPending &&
-        !testingMode &&
-        emergencyMode
+        !testingMode
     )
     {
         triggerEmergencyEvent();
 
         eventPending =
             false;
+
+        pendingEventMessage = "";
     }
 }
 
