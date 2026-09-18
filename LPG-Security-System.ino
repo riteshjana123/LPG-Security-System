@@ -255,6 +255,7 @@ unsigned long lastBlynkReconnectAttempt = 0;
 // ==========================================================
 
 bool eventPending = false;
+String pendingEventMessage = "";
 
 
 // ==========================================================
@@ -1038,7 +1039,24 @@ void evaluateSystemState()
         );
 
 
-        // One notification per activation.
+        // One notification per automatic emergency activation.
+        // Snapshot the event now so it can still be reported if
+        // the hazard clears before Blynk reconnects.
+        pendingEventMessage = "LPG SECURITY EMERGENCY";
+        pendingEventMessage += " | Cause: ";
+        pendingEventMessage += getAlarmCause();
+        pendingEventMessage += " | Gas: ";
+        pendingEventMessage += String((int)gasFiltered);
+        pendingEventMessage += " | Temp: ";
+        if (!isnan(temperature))
+        {
+            pendingEventMessage += String(temperature, 1);
+            pendingEventMessage += " C";
+        }
+        else
+        {
+            pendingEventMessage += "N/A";
+        }
         eventPending = true;
     }
 
@@ -1932,60 +1950,14 @@ void maintainConnections()
 
 void triggerEmergencyEvent()
 {
-    String message =
-        "LPG SECURITY EMERGENCY";
-
-
-    message +=
-        " | Cause: ";
-
-    message +=
-        getAlarmCause();
-
-
-    message +=
-        " | Gas: ";
-
-    message +=
-        String(
-            (int)gasFiltered
-        );
-
-
-    message +=
-        " | Temp: ";
-
-
-    if (
-        !isnan(temperature)
-    )
-    {
-        message +=
-            String(
-                temperature,
-                1
-            );
-
-        message +=
-            " C";
-    }
-    else
-    {
-        message +=
-            "N/A";
-    }
-
-
     Serial.println(
         "Sending Blynk emergency event..."
     );
 
-
-    // Must match Blynk Event Code exactly.
-
+    // Must match the Blynk Event Code exactly.
     Blynk.logEvent(
         "lpg_emergency",
-        message
+        pendingEventMessage
     );
 }
 
