@@ -29,9 +29,20 @@ The system is designed around a simple rule:
 - Fan controlled through the BC547 + MOSFET driver
 - Blynk live telemetry
 - Blynk push notification for emergency activation
+- Web-dash event visibility
+- Testing Mode for controlled manual actuator testing
+- Manual fan, relay, servo-angle, and buzzer control from Blynk
 - Continues local safety behavior when Wi-Fi/Blynk is unavailable
 
 ## System behavior
+
+### Testing Mode
+
+The Blynk **Testing Mode** switch provides a controlled bench-test override. When Testing Mode is ON, automatic actuator control is suspended and the dashboard can control the fan, relay, servo angle, and buzzer independently. Sensor telemetry remains visible so gas, fire, and temperature behavior can still be observed.
+
+When Testing Mode is switched OFF, automatic security control is restored immediately. The ESP32 re-evaluates the current sensor conditions; if a hazard is still present, Emergency Mode is entered immediately.
+
+Testing Mode is intended for controlled prototype testing and is not a substitute for a real-world safety interlock.
 
 ### Normal mode
 
@@ -186,6 +197,12 @@ The firmware expects I2C address 0x3C.
 | V9 | Wi-Fi | Integer (0/1) |
 | V10 | Alarm Cause | String |
 | V11 | Blynk Connected | Integer (0/1) |
+| V12 | Testing Mode | Integer (0/1) |
+| V13 | Manual Fan | Integer (0/1) |
+| V14 | Manual Relay | Integer (0/1) |
+| V15 | Manual Servo Angle | Integer (0–180) |
+| V16 | Manual Buzzer | Integer (0/1) |
+| V17 | LPG Leakage | Integer (0/1) |
 
 ### Emergency notification
 
@@ -204,7 +221,7 @@ Blynk.logEvent("lpg_emergency", message);
 
 The event is generated on a transition from normal to emergency. If Blynk is unavailable at that moment, the firmware keeps the event pending and sends it when Blynk reconnects.
 
-See [docs/BLYNK_SETUP.md](docs/BLYNK_SETUP.md) for the dashboard/datastream setup.
+See [docs/BLYNK_SETUP.md](docs/BLYNK_SETUP.md) for the dashboard, datastream, Testing Mode, and notification setup.
 
 ## Software setup
 
