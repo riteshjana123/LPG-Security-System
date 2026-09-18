@@ -1,0 +1,72 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="1400" height="900" viewBox="0 0 1400 900">
+  <rect width="1400" height="900" fill="#f6f8fa"/>
+  <text x="70" y="70" font-family="Arial, sans-serif" font-size="38" font-weight="700" fill="#111827">LPG Security System — ESP32 + Blynk</text>
+  <text x="70" y="108" font-family="Arial, sans-serif" font-size="20" fill="#4b5563">Local emergency control with IoT monitoring and notification</text>
+
+  <rect x="520" y="310" width="360" height="190" rx="20" fill="#1f2937"/>
+  <text x="700" y="365" text-anchor="middle" font-family="Arial, sans-serif" font-size="32" font-weight="700" fill="#ffffff">ESP32</text>
+  <text x="700" y="402" text-anchor="middle" font-family="Arial, sans-serif" font-size="18" fill="#d1d5db">Emergency decision logic</text>
+  <text x="700" y="435" text-anchor="middle" font-family="Arial, sans-serif" font-size="18" fill="#d1d5db">OLED • LEDs • Buzzer</text>
+  <text x="700" y="468" text-anchor="middle" font-family="Arial, sans-serif" font-size="18" fill="#d1d5db">Relay • Servo • Fan</text>
+
+  <g font-family="Arial, sans-serif">
+    <rect x="70" y="190" width="250" height="120" rx="16" fill="#ffffff" stroke="#9ca3af" stroke-width="2"/>
+    <text x="195" y="235" text-anchor="middle" font-size="24" font-weight="700" fill="#111827">MQ-6</text>
+    <text x="195" y="268" text-anchor="middle" font-size="17" fill="#4b5563">Gas / ADC input</text>
+    <text x="195" y="292" text-anchor="middle" font-size="14" fill="#6b7280">Voltage divider → GPIO34</text>
+
+    <rect x="360" y="150" width="220" height="110" rx="16" fill="#ffffff" stroke="#9ca3af" stroke-width="2"/>
+    <text x="470" y="195" text-anchor="middle" font-size="24" font-weight="700" fill="#111827">DHT11</text>
+    <text x="470" y="226" text-anchor="middle" font-size="17" fill="#4b5563">Temperature / Humidity</text>
+
+    <rect x="900" y="150" width="220" height="110" rx="16" fill="#ffffff" stroke="#9ca3af" stroke-width="2"/>
+    <text x="1010" y="195" text-anchor="middle" font-size="24" font-weight="700" fill="#111827">Flame Sensor</text>
+    <text x="1010" y="226" text-anchor="middle" font-size="17" fill="#4b5563">Digital input → GPIO27</text>
+
+    <rect x="1010" y="335" width="280" height="130" rx="16" fill="#ffffff" stroke="#9ca3af" stroke-width="2"/>
+    <text x="1150" y="380" text-anchor="middle" font-size="24" font-weight="700" fill="#111827">Blynk IoT</text>
+    <text x="1150" y="413" text-anchor="middle" font-size="17" fill="#4b5563">Telemetry + Emergency Event</text>
+    <text x="1150" y="441" text-anchor="middle" font-size="15" fill="#6b7280">Wi-Fi connection</text>
+
+    <rect x="65" y="610" width="250" height="135" rx="16" fill="#ffffff" stroke="#9ca3af" stroke-width="2"/>
+    <text x="190" y="655" text-anchor="middle" font-size="22" font-weight="700" fill="#111827">Relay Interface</text>
+    <text x="190" y="686" text-anchor="middle" font-size="16" fill="#4b5563">Single BC547 inverter</text>
+    <text x="190" y="714" text-anchor="middle" font-size="15" fill="#6b7280">GPIO26 LOW → Relay ON</text>
+
+    <rect x="355" y="610" width="220" height="135" rx="16" fill="#ffffff" stroke="#9ca3af" stroke-width="2"/>
+    <text x="465" y="655" text-anchor="middle" font-size="22" font-weight="700" fill="#111827">MG90S Servo</text>
+    <text x="465" y="686" text-anchor="middle" font-size="16" fill="#4b5563">GPIO13</text>
+    <text x="465" y="714" text-anchor="middle" font-size="15" fill="#6b7280">90° normal / 0° emergency</text>
+
+    <rect x="610" y="610" width="220" height="135" rx="16" fill="#ffffff" stroke="#9ca3af" stroke-width="2"/>
+    <text x="720" y="655" text-anchor="middle" font-size="22" font-weight="700" fill="#111827">Fan Driver</text>
+    <text x="720" y="686" text-anchor="middle" font-size="16" fill="#4b5563">BC547 + MOSFET</text>
+    <text x="720" y="714" text-anchor="middle" font-size="15" fill="#6b7280">GPIO18 LOW → Fan ON</text>
+
+    <rect x="865" y="610" width="220" height="135" rx="16" fill="#ffffff" stroke="#9ca3af" stroke-width="2"/>
+    <text x="975" y="655" text-anchor="middle" font-size="22" font-weight="700" fill="#111827">Alarm Outputs</text>
+    <text x="975" y="686" text-anchor="middle" font-size="16" fill="#4b5563">Red / Blue LEDs</text>
+    <text x="975" y="714" text-anchor="middle" font-size="15" fill="#6b7280">Buzzer + Green Wi-Fi LED</text>
+
+    <rect x="1115" y="610" width="220" height="135" rx="16" fill="#ffffff" stroke="#9ca3af" stroke-width="2"/>
+    <text x="1225" y="655" text-anchor="middle" font-size="22" font-weight="700" fill="#111827">OLED</text>
+    <text x="1225" y="686" text-anchor="middle" font-size="16" fill="#4b5563">I2C: GPIO21 / GPIO22</text>
+    <text x="1225" y="714" text-anchor="middle" font-size="15" fill="#6b7280">Status + sensor data</text>
+  </g>
+
+  <g stroke="#6b7280" stroke-width="4" fill="none">
+    <line x1="320" y1="250" x2="520" y2="350"/>
+    <line x1="580" y1="205" x2="610" y2="310"/>
+    <line x1="900" y1="205" x2="790" y2="310"/>
+    <line x1="880" y1="405" x2="1010" y2="405"/>
+    <line x1="620" y1="500" x2="190" y2="610"/>
+    <line x1="670" y1="500" x2="465" y2="610"/>
+    <line x1="720" y1="500" x2="720" y2="610"/>
+    <line x1="770" y1="500" x2="975" y2="610"/>
+    <line x1="825" y1="500" x2="1225" y2="610"/>
+  </g>
+
+  <text x="70" y="825" font-family="Arial, sans-serif" font-size="18" fill="#374151">NORMAL: Relay ON • Fan OFF • Servo 90°</text>
+  <text x="700" y="825" font-family="Arial, sans-serif" font-size="18" fill="#374151">EMERGENCY: Relay OFF • Fan ON • Servo 0° • Blynk Alert</text>
+</svg>
