@@ -155,6 +155,12 @@ Configured telemetry channels:
 
 The emergency event code is `lpg_emergency`.
 
+### Testing and manual-control mode
+
+A dedicated Testing Mode datastream (V12) provides a controlled bench-test override. When V12 is ON, the automatic actuator response is suspended and the dashboard can issue manual commands for the fan (V13), relay (V14), servo angle (V15), and buzzer (V16). Sensor telemetry remains active, including individual fire detection and LPG leakage status. When V12 is switched OFF, the ESP32 immediately resumes automatic evaluation and can enter emergency mode if a hazard is currently present.
+
+This separation allows actuator testing without changing the sensor-monitoring path while making the operating mode explicit on the OLED and dashboard.
+
 See [BLYNK_SETUP.md](BLYNK_SETUP.md).
 
 ## 9. Software Design
