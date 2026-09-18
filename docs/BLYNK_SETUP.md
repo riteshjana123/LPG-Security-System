@@ -133,7 +133,7 @@ Blynk.logEvent("lpg_emergency", message);
 
 The event is generated once when automatic security mode changes from normal to emergency. It is not generated repeatedly on every sensor-reading cycle.
 
-If Blynk is unavailable, the event is held locally and sent after Blynk reconnects, provided automatic emergency mode is active.
+If Blynk is unavailable, the event is held locally with a snapshot of the alarm cause, gas value, and temperature and is sent after Blynk reconnects, unless Testing Mode is activated before delivery.
 
 ## 5. Web dashboard
 
