@@ -1,0 +1,95 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="1800" height="1100" viewBox="0 0 1800 1100">
+  <rect width="1800" height="1100" fill="#eef2f7"/>
+  <text x="70" y="65" font-family="Arial" font-size="40" font-weight="700" fill="#111827">LPG Security System — Circuit Diagram</text>
+  <text x="70" y="100" font-family="Arial" font-size="20" fill="#4b5563">ESP32 controller, sensors, indicators, actuator drivers and Blynk connectivity</text>
+
+  <!-- ESP32 -->
+  <rect x="620" y="380" width="430" height="260" rx="18" fill="#202938"/>
+  <text x="835" y="435" text-anchor="middle" font-family="Arial" font-size="34" font-weight="700" fill="#fff">ESP32 Dev Module</text>
+  <text x="835" y="470" text-anchor="middle" font-family="Arial" font-size="18" fill="#d1d5db">Central controller</text>
+  <text x="655" y="510" font-family="Arial" font-size="17" fill="#d1d5db">GPIO34  ← MQ-6 AO (via divider)</text>
+  <text x="655" y="540" font-family="Arial" font-size="17" fill="#d1d5db">GPIO4   ← DHT11 DATA</text>
+  <text x="655" y="570" font-family="Arial" font-size="17" fill="#d1d5db">GPIO27  ← Flame sensor DO</text>
+  <text x="655" y="600" font-family="Arial" font-size="17" fill="#d1d5db">GPIO21/22 ↔ OLED I²C</text>
+  <text x="655" y="630" font-family="Arial" font-size="17" fill="#d1d5db">GPIO26 → Relay • GPIO13 → Servo • GPIO18 → Fan</text>
+
+  <!-- Sensors -->
+  <g font-family="Arial">
+    <rect x="80" y="190" width="280" height="125" rx="16" fill="#fff" stroke="#9ca3af" stroke-width="2"/>
+    <text x="220" y="238" text-anchor="middle" font-size="26" font-weight="700" fill="#111827">MQ-6 Gas Sensor</text>
+    <text x="220" y="270" text-anchor="middle" font-size="16" fill="#4b5563">AO → 10k/20k divider → GPIO34</text>
+    <text x="220" y="294" text-anchor="middle" font-size="14" fill="#6b7280">VCC typically 5 V; common GND</text>
+
+    <rect x="395" y="150" width="260" height="115" rx="16" fill="#fff" stroke="#9ca3af" stroke-width="2"/>
+    <text x="525" y="198" text-anchor="middle" font-size="26" font-weight="700" fill="#111827">DHT11</text>
+    <text x="525" y="230" text-anchor="middle" font-size="17" fill="#4b5563">Temperature + Humidity</text>
+    <text x="525" y="250" text-anchor="middle" font-size="14" fill="#6b7280">DATA → GPIO4</text>
+
+    <rect x="1130" y="150" width="280" height="115" rx="16" fill="#fff" stroke="#9ca3af" stroke-width="2"/>
+    <text x="1270" y="198" text-anchor="middle" font-size="26" font-weight="700" fill="#111827">Flame Sensor</text>
+    <text x="1270" y="230" text-anchor="middle" font-size="17" fill="#4b5563">DO → GPIO27</text>
+    <text x="1270" y="250" text-anchor="middle" font-size="14" fill="#6b7280">Default firmware assumes active LOW</text>
+
+    <rect x="1460" y="220" width="260" height="125" rx="16" fill="#fff" stroke="#9ca3af" stroke-width="2"/>
+    <text x="1590" y="265" text-anchor="middle" font-size="25" font-weight="700" fill="#111827">OLED 0.96&quot;</text>
+    <text x="1590" y="294" text-anchor="middle" font-size="16" fill="#4b5563">I²C SDA → GPIO21</text>
+    <text x="1590" y="320" text-anchor="middle" font-size="16" fill="#4b5563">I²C SCL → GPIO22</text>
+
+    <rect x="90" y="700" width="260" height="145" rx="16" fill="#fff" stroke="#9ca3af" stroke-width="2"/>
+    <text x="220" y="745" text-anchor="middle" font-size="25" font-weight="700" fill="#111827">Status LEDs</text>
+    <text x="220" y="775" text-anchor="middle" font-size="16" fill="#4b5563">Green → GPIO25</text>
+    <text x="220" y="800" text-anchor="middle" font-size="16" fill="#4b5563">Red → GPIO33</text>
+    <text x="220" y="825" text-anchor="middle" font-size="16" fill="#4b5563">Blue → GPIO32</text>
+
+    <rect x="395" y="710" width="260" height="115" rx="16" fill="#fff" stroke="#9ca3af" stroke-width="2"/>
+    <text x="525" y="755" text-anchor="middle" font-size="25" font-weight="700" fill="#111827">Buzzer</text>
+    <text x="525" y="790" text-anchor="middle" font-size="17" fill="#4b5563">Control → GPIO14</text>
+
+    <rect x="720" y="745" width="300" height="145" rx="16" fill="#fff" stroke="#9ca3af" stroke-width="2"/>
+    <text x="870" y="790" text-anchor="middle" font-size="25" font-weight="700" fill="#111827">Relay Interface</text>
+    <text x="870" y="820" text-anchor="middle" font-size="16" fill="#4b5563">Single BC547 inverter</text>
+    <text x="870" y="845" text-anchor="middle" font-size="15" fill="#6b7280">GPIO26 → 1k → base</text>
+    <text x="870" y="868" text-anchor="middle" font-size="15" fill="#6b7280">10k pull-up → +5 V → Relay IN</text>
+
+    <rect x="1080" y="710" width="290" height="145" rx="16" fill="#fff" stroke="#9ca3af" stroke-width="2"/>
+    <text x="1225" y="755" text-anchor="middle" font-size="25" font-weight="700" fill="#111827">Fan Driver</text>
+    <text x="1225" y="785" text-anchor="middle" font-size="16" fill="#4b5563">BC547 + MOSFET</text>
+    <text x="1225" y="812" text-anchor="middle" font-size="15" fill="#6b7280">GPIO18 LOW → Fan ON</text>
+
+    <rect x="1440" y="530" width="270" height="135" rx="16" fill="#fff" stroke="#9ca3af" stroke-width="2"/>
+    <text x="1575" y="575" text-anchor="middle" font-size="25" font-weight="700" fill="#111827">MG90S Servo</text>
+    <text x="1575" y="605" text-anchor="middle" font-size="16" fill="#4b5563">Signal → GPIO13</text>
+    <text x="1575" y="630" text-anchor="middle" font-size="15" fill="#6b7280">90° normal / 0° emergency</text>
+
+    <rect x="1380" y="710" width="320" height="145" rx="16" fill="#fff" stroke="#9ca3af" stroke-width="2"/>
+    <text x="1540" y="755" text-anchor="middle" font-size="25" font-weight="700" fill="#111827">Blynk Cloud</text>
+    <text x="1540" y="785" text-anchor="middle" font-size="16" fill="#4b5563">Wi-Fi telemetry</text>
+    <text x="1540" y="812" text-anchor="middle" font-size="15" fill="#6b7280">Emergency event: lpg_emergency</text>
+
+    <rect x="1110" y="900" width="590" height="110" rx="16" fill="#fff4e5" stroke="#d97706" stroke-width="2"/>
+    <text x="1405" y="940" text-anchor="middle" font-size="22" font-weight="700" fill="#92400e">Power / Grounding</text>
+    <text x="1405" y="970" text-anchor="middle" font-size="15" fill="#78350f">Use appropriate external supplies for MQ-6, relay, servo and fan; share low-voltage GND.</text>
+    <text x="1405" y="994" text-anchor="middle" font-size="14" fill="#92400e">Keep all mains wiring isolated from the low-voltage control circuit.</text>
+  </g>
+
+  <!-- Signal lines -->
+  <g stroke="#475569" stroke-width="4" fill="none">
+    <path d="M360 250 L620 425"/>
+    <path d="M525 265 L680 380"/>
+    <path d="M1130 245 L1010 405"/>
+    <path d="M1460 300 L1050 450"/>
+    <path d="M350 760 L620 555"/>
+    <path d="M655 770 L690 610"/>
+    <path d="M870 745 L835 640"/>
+    <path d="M1080 770 L930 640"/>
+    <path d="M1440 590 L1050 585"/>
+    <path d="M1380 790 L1050 515"/>
+  </g>
+
+  <!-- Logic notes -->
+  <rect x="70" y="910" width="940" height="100" rx="16" fill="#ecfdf5" stroke="#059669" stroke-width="2"/>
+  <text x="95" y="945" font-family="Arial" font-size="20" font-weight="700" fill="#065f46">Control logic</text>
+  <text x="95" y="972" font-family="Arial" font-size="16" fill="#065f46">NORMAL: Relay ON • Fan OFF • Servo 90° • Green status</text>
+  <text x="95" y="996" font-family="Arial" font-size="16" fill="#065f46">EMERGENCY: Relay OFF • Fan ON • Servo 0° • Buzzer ON • Red/Blue alternate • Blynk alert</text>
+</svg>
