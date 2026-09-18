@@ -1,5 +1,11 @@
 # LPG Security System
 
+![Platform](https://img.shields.io/badge/platform-ESP32-blue)  
+![Arduino](https://img.shields.io/badge/framework-Arduino-00979D)  
+![IoT](https://img.shields.io/badge/IoT-Blynk-23C48E)  
+![License](https://img.shields.io/github/license/riteshjana123/LPG-Security-System)  
+![Repo Size](https://img.shields.io/github/repo-size/riteshjana123/LPG-Security-System)
+
 > **ESP32 • MQ-6 • DHT11 • Flame Sensor • Blynk • OLED • Relay • Servo • Fan • Alarm LEDs**
 
 An ESP32-based LPG and fire-safety prototype that monitors gas, flame, and temperature conditions locally and reports system status to Blynk over Wi-Fi.
@@ -232,6 +238,10 @@ Then replace the placeholders with your own Wi-Fi and Blynk credentials.
 4. Compile.
 5. Upload.
 6. Open Serial Monitor at **115200 baud**.
+
+## Project Media
+
+Real hardware photographs, Serial Monitor output, Blynk dashboard, and Datastream screenshots will be added as the prototype documentation is completed.
 
 ## Testing sequence
 
