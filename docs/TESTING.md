@@ -1,3 +1,20 @@
+# Testing Mode
+
+Testing Mode is controlled by Blynk V12.
+
+- V12 = 0: automatic LPG security control is active.
+- V12 = 1: automatic actuator control is suspended for controlled bench testing.
+
+While Testing Mode is ON, the dashboard controls V13 (fan), V14 (relay), V15 (servo angle), and V16 (buzzer). Sensor telemetry remains active, including V4 Fire Detection and V17 LPG Leakage.
+
+Switching V12 OFF immediately restores automatic evaluation. If a hazard is currently detected, the controller enters Emergency Mode rather than blindly returning to normal.
+
+The OLED displays `STATUS: TEST MODE` while the override is active.
+
+**Safety:** Testing Mode is a prototype bench-test override and should not be used as a real-world safety interlock.
+
+---
+
 # Testing Guide
 
 The project should be tested in stages. Verify the low-voltage behavior before connecting any mains load.
