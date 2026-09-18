@@ -1,41 +1,86 @@
 /************************************************************
  * LPG SECURITY SYSTEM
+ *
  * ESP32 + Blynk + MQ-6 + DHT11 + Flame Sensor
  * OLED + MG90S Servo + Relay + Fan + LEDs + Buzzer
  *
- * Relay interface (single BC547 inverter):
- *   ESP32 GPIO26 -> 1k -> BC547 base
- *   BC547 base -> 4.7k -> GND
- *   BC547 collector -> Relay IN
- *   BC547 collector -> 10k -> +5V
- *   BC547 emitter -> GND
+ * ==========================================================
+ * OPERATING MODES
+ * ==========================================================
  *
- * Relay logic with this circuit:
- *   GPIO26 LOW  -> BC547 OFF -> Relay IN HIGH (~5V) -> RELAY ON
- *   GPIO26 HIGH -> BC547 ON  -> Relay IN LOW        -> RELAY OFF
+ * AUTOMATIC SECURITY MODE (Testing Mode = 0)
+ *   Any one of:
+ *      - LPG leakage alarm
+ *      - Flame detected
+ *      - High temperature
+ *   => Emergency mode
  *
- * Fan driver:
- *   GPIO18 LOW  -> FAN ON
- *   GPIO18 HIGH -> FAN OFF
+ *   Emergency outputs:
+ *      Relay OFF
+ *      Fan ON
+ *      Servo 0°
+ *      Buzzer ON
+ *      Green LED OFF
+ *      Red/Blue alternate
+ *      Blynk emergency event
  *
- * System logic:
- *   NORMAL:
- *     Relay ON, Fan OFF, Servo 90, Buzzer OFF
- *     Green LED = solid when Wi-Fi connected
- *     Green LED = blinking when Wi-Fi is not connected
+ * TESTING MODE (Testing Mode = 1)
+ *   Automatic safety actuation is intentionally overridden
+ *   for bench testing.
  *
- *   EMERGENCY:
- *     Relay OFF, Fan ON, Servo 0, Buzzer ON
- *     Green LED OFF
- *     Red/Blue LEDs alternate
- *     Blynk event = lpg_emergency
+ *   Dashboard controls:
+ *      V13 -> Manual Fan
+ *      V14 -> Manual Relay
+ *      V15 -> Manual Servo Angle
+ *      V16 -> Manual Buzzer
  *
- * IMPORTANT:
- * - MQ-6 value is an ADC reading, not calibrated LPG ppm.
- * - Use a voltage divider on MQ-6 AO before ESP32 GPIO34
- *   when the MQ-6 module is powered from 5V.
- * - Keep all grounds common.
- * - Do not connect mains wiring to a breadboard.
+ *   Sensor readings remain visible:
+ *      V4  -> Fire Detection
+ *      V17 -> LPG Leakage
+ *      V2  -> Temperature
+ *      V10 -> Alarm Cause
+ *
+ *   Blynk emergency notification is suppressed while
+ *   Testing Mode is active because automatic safety mode
+ *   is intentionally disabled.
+ *
+ *   IMPORTANT:
+ *   Testing Mode is for controlled bench/prototype testing.
+ *   Do not use it as a substitute for a real safety interlock.
+ *
+ * ==========================================================
+ * RELAY HARDWARE — SINGLE BC547 INVERTER
+ * ==========================================================
+ *
+ * ESP32 GPIO26 -> 1k -> BC547 Base
+ * BC547 Base -> 4.7k -> GND
+ * BC547 Emitter -> GND
+ * BC547 Collector -> Relay IN
+ * BC547 Collector -> 10k -> +5V
+ *
+ * Relay VCC -> +5V
+ * Relay GND -> common GND
+ *
+ * With this inverter:
+ *   GPIO26 LOW  -> BC547 OFF -> Relay IN HIGH -> Relay ON
+ *   GPIO26 HIGH -> BC547 ON  -> Relay IN LOW  -> Relay OFF
+ *
+ * ==========================================================
+ * FAN HARDWARE — BC547 + MOSFET INVERTED DRIVER
+ * ==========================================================
+ *
+ *   GPIO18 LOW  -> Fan ON
+ *   GPIO18 HIGH -> Fan OFF
+ *
+ * ==========================================================
+ * IMPORTANT
+ * ==========================================================
+ *
+ * - MQ-6 value is an ADC/relative reading, not calibrated ppm.
+ * - If MQ-6 is powered from 5V, use a divider before GPIO34.
+ * - Use an adequate external supply for the MG90S and fan.
+ * - Keep all low-voltage grounds common.
+ * - Keep mains wiring isolated from the low-voltage circuit.
  ************************************************************/
 
 #define BLYNK_PRINT Serial
@@ -50,8 +95,9 @@
 #include <DHT.h>
 #include <ESP32Servo.h>
 
+
 // ==========================================================
-// PINS
+// PIN CONFIGURATION
 // ==========================================================
 
 #define MQ6_PIN         34
@@ -71,8 +117,9 @@
 #define BUZZER_PIN      14
 #define FAN_CTRL_PIN    18
 
+
 // ==========================================================
-// SENSOR / DISPLAY CONFIG
+// SENSOR / DISPLAY CONFIGURATION
 // ==========================================================
 
 #define DHTTYPE DHT11
@@ -82,32 +129,60 @@
 #define OLED_RESET      -1
 #define OLED_ADDRESS    0x3C
 
+
+// ==========================================================
+// OBJECTS
+// ==========================================================
+
 DHT dht(DHT_PIN, DHTTYPE);
+
 Servo gasServo;
-Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
+
+Adafruit_SSD1306 display(
+    SCREEN_WIDTH,
+    SCREEN_HEIGHT,
+    &Wire,
+    OLED_RESET
+);
+
 BlynkTimer timer;
 
+
 // ==========================================================
-// TUNABLE THRESHOLDS
+// THRESHOLDS
 // ==========================================================
 
-// ADC threshold only. NOT LPG ppm.
+// MQ-6 ADC threshold only.
+// NOT a calibrated LPG ppm value.
 int GAS_THRESHOLD = 1800;
 
-// Demonstration threshold.
+// Demonstration temperature threshold.
 float TEMPERATURE_THRESHOLD = 50.0;
 
-// Set true if your flame module output goes LOW when flame is detected.
+
+// ==========================================================
+// SENSOR POLARITY
+// ==========================================================
+
+// Typical flame module:
+// LOW = flame detected
 bool FLAME_ACTIVE_LOW = true;
+
+
+// ==========================================================
+// SERVO POSITIONS
+// ==========================================================
 
 const int SERVO_NORMAL_ANGLE = 90;
 const int SERVO_EMERGENCY_ANGLE = 0;
 
+
 // ==========================================================
-// STATE
+// SENSOR STATE
 // ==========================================================
 
 int gasRaw = 0;
+
 float gasFiltered = 0.0f;
 
 float temperature = NAN;
@@ -117,23 +192,70 @@ bool gasAlarm = false;
 bool flameDetected = false;
 bool temperatureAlarm = false;
 
+bool sensorEmergency = false;
+
+
+// ==========================================================
+// SYSTEM STATE
+// ==========================================================
+
+bool testingMode = false;
+
 bool emergencyMode = false;
 bool previousEmergencyMode = false;
 
+
+// ==========================================================
+// MANUAL TEST CONTROLS
+// ==========================================================
+
+bool manualFan = false;
+bool manualRelay = false;
+bool manualBuzzer = false;
+
+int manualServoAngle =
+    SERVO_NORMAL_ANGLE;
+
+
+// ==========================================================
+// ACTUAL OUTPUT STATE
+// ==========================================================
+
 bool relayState = false;
 bool fanState = false;
-int servoAngle = SERVO_NORMAL_ANGLE;
+
+int servoAngle =
+    SERVO_NORMAL_ANGLE;
+
+
+// ==========================================================
+// LED STATE
+// ==========================================================
 
 bool greenLedState = false;
 bool emergencyFlashState = false;
 
 unsigned long lastGreenBlink = 0;
 unsigned long lastEmergencyFlash = 0;
+
+
+// ==========================================================
+// TIMERS
+// ==========================================================
+
 unsigned long lastOLEDUpdate = 0;
+
 unsigned long lastWifiReconnectAttempt = 0;
+
 unsigned long lastBlynkReconnectAttempt = 0;
 
+
+// ==========================================================
+// BLYNK EVENT
+// ==========================================================
+
 bool eventPending = false;
+
 
 // ==========================================================
 // FUNCTION DECLARATIONS
@@ -141,14 +263,246 @@ bool eventPending = false;
 
 void readFastSensors();
 void readDHT();
-void evaluateEmergencyState();
+
+void evaluateSystemState();
 void applyOutputs();
+
 void updateLEDs();
 void updateOLED();
+
 void sendBlynkData();
 void maintainConnections();
+
 void triggerEmergencyEvent();
+
 String getAlarmCause();
+
+
+// ==========================================================
+// BLYNK INPUT CALLBACKS
+// ==========================================================
+
+// ----------------------------------------------------------
+// TESTING MODE
+// ----------------------------------------------------------
+
+BLYNK_WRITE(V12)
+{
+    bool newTestingMode =
+        param.asInt() != 0;
+
+    // No change
+    if (newTestingMode == testingMode)
+    {
+        return;
+    }
+
+    testingMode =
+        newTestingMode;
+
+
+    // ------------------------------------------------------
+    // ENTER TESTING MODE
+    // ------------------------------------------------------
+
+    if (testingMode)
+    {
+        Serial.println();
+        Serial.println(
+            "================================"
+        );
+
+        Serial.println(
+            "TESTING MODE ACTIVATED"
+        );
+
+        Serial.println(
+            "Automatic safety control is OFF"
+        );
+
+        Serial.println(
+            "================================"
+        );
+
+
+        // Suppress any pending automatic
+        // emergency notification while testing.
+
+        eventPending = false;
+
+
+        // Force effective emergency state OFF
+        // while testing.
+
+        emergencyMode = false;
+
+        previousEmergencyMode = false;
+
+
+        // Apply manual test outputs.
+
+        applyOutputs();
+    }
+
+
+    // ------------------------------------------------------
+    // EXIT TESTING MODE
+    // ------------------------------------------------------
+
+    else
+    {
+        Serial.println();
+        Serial.println(
+            "================================"
+        );
+
+        Serial.println(
+            "AUTOMATIC SECURITY MODE"
+        );
+
+        Serial.println(
+            "Automatic safety control restored"
+        );
+
+        Serial.println(
+            "================================"
+        );
+
+
+        // Start from a non-emergency previous state.
+        // If a hazard is currently present, the next
+        // evaluation immediately enters emergency mode.
+
+        previousEmergencyMode = false;
+
+        evaluateSystemState();
+    }
+}
+
+
+// ----------------------------------------------------------
+// MANUAL FAN
+// ----------------------------------------------------------
+
+BLYNK_WRITE(V13)
+{
+    manualFan =
+        param.asInt() != 0;
+
+    Serial.print(
+        "Manual Fan: "
+    );
+
+    Serial.println(
+        manualFan ? "ON" : "OFF"
+    );
+
+
+    if (testingMode)
+    {
+        applyOutputs();
+    }
+}
+
+
+// ----------------------------------------------------------
+// MANUAL RELAY
+// ----------------------------------------------------------
+
+BLYNK_WRITE(V14)
+{
+    manualRelay =
+        param.asInt() != 0;
+
+    Serial.print(
+        "Manual Relay: "
+    );
+
+    Serial.println(
+        manualRelay ? "ON" : "OFF"
+    );
+
+
+    if (testingMode)
+    {
+        applyOutputs();
+    }
+}
+
+
+// ----------------------------------------------------------
+// MANUAL SERVO
+// ----------------------------------------------------------
+
+BLYNK_WRITE(V15)
+{
+    manualServoAngle =
+        constrain(
+            param.asInt(),
+            0,
+            180
+        );
+
+    Serial.print(
+        "Manual Servo Angle: "
+    );
+
+    Serial.println(
+        manualServoAngle
+    );
+
+
+    if (testingMode)
+    {
+        applyOutputs();
+    }
+}
+
+
+// ----------------------------------------------------------
+// MANUAL BUZZER
+// ----------------------------------------------------------
+
+BLYNK_WRITE(V16)
+{
+    manualBuzzer =
+        param.asInt() != 0;
+
+    Serial.print(
+        "Manual Buzzer: "
+    );
+
+    Serial.println(
+        manualBuzzer ? "ON" : "OFF"
+    );
+
+
+    if (testingMode)
+    {
+        applyOutputs();
+    }
+}
+
+
+// ==========================================================
+// BLYNK CONNECTED
+// ==========================================================
+
+BLYNK_CONNECTED()
+{
+    Serial.println(
+        "Blynk connected."
+    );
+
+    // Restore dashboard control values.
+
+    Blynk.syncVirtual(V12);
+    Blynk.syncVirtual(V13);
+    Blynk.syncVirtual(V14);
+    Blynk.syncVirtual(V15);
+    Blynk.syncVirtual(V16);
+}
+
 
 // ==========================================================
 // SETUP
@@ -157,117 +511,314 @@ String getAlarmCause();
 void setup()
 {
     Serial.begin(115200);
+
     delay(300);
 
+
     Serial.println();
-    Serial.println("========================================");
-    Serial.println("       LPG SECURITY SYSTEM");
-    Serial.println("========================================");
+    Serial.println(
+        "========================================"
+    );
 
-    // ------------------------------
+    Serial.println(
+        "       LPG SECURITY SYSTEM"
+    );
+
+    Serial.println(
+        "========================================"
+    );
+
+
+    // ======================================================
     // GPIO
-    // ------------------------------
+    // ======================================================
 
-    pinMode(FLAME_PIN, INPUT_PULLUP);
-    pinMode(RELAY_PIN, OUTPUT);
-    pinMode(GREEN_LED_PIN, OUTPUT);
-    pinMode(RED_LED_PIN, OUTPUT);
-    pinMode(BLUE_LED_PIN, OUTPUT);
-    pinMode(BUZZER_PIN, OUTPUT);
-    pinMode(FAN_CTRL_PIN, OUTPUT);
+    pinMode(
+        FLAME_PIN,
+        INPUT_PULLUP
+    );
 
-    // Safe low-level startup.
-    // Single-BC547 relay stage: HIGH = relay OFF.
-    digitalWrite(RELAY_PIN, HIGH);
-    digitalWrite(GREEN_LED_PIN, LOW);
-    digitalWrite(RED_LED_PIN, LOW);
-    digitalWrite(BLUE_LED_PIN, LOW);
-    digitalWrite(BUZZER_PIN, LOW);
-    digitalWrite(FAN_CTRL_PIN, HIGH); // inverted fan driver: HIGH = OFF
+    pinMode(
+        RELAY_PIN,
+        OUTPUT
+    );
 
-    // ------------------------------
+    pinMode(
+        GREEN_LED_PIN,
+        OUTPUT
+    );
+
+    pinMode(
+        RED_LED_PIN,
+        OUTPUT
+    );
+
+    pinMode(
+        BLUE_LED_PIN,
+        OUTPUT
+    );
+
+    pinMode(
+        BUZZER_PIN,
+        OUTPUT
+    );
+
+    pinMode(
+        FAN_CTRL_PIN,
+        OUTPUT
+    );
+
+
+    // ======================================================
+    // STARTUP OUTPUTS
+    // ======================================================
+
+    // Single-BC547 relay:
+    // HIGH -> relay OFF
+
+    digitalWrite(
+        RELAY_PIN,
+        HIGH
+    );
+
+    relayState = false;
+
+
+    // Green OFF
+    digitalWrite(
+        GREEN_LED_PIN,
+        LOW
+    );
+
+
+    // Emergency LEDs OFF
+
+    digitalWrite(
+        RED_LED_PIN,
+        LOW
+    );
+
+    digitalWrite(
+        BLUE_LED_PIN,
+        LOW
+    );
+
+
+    // Buzzer OFF
+
+    digitalWrite(
+        BUZZER_PIN,
+        LOW
+    );
+
+
+    // Fan OFF
+    // Inverted driver: HIGH = OFF
+
+    digitalWrite(
+        FAN_CTRL_PIN,
+        HIGH
+    );
+
+    fanState = false;
+
+
+    // ======================================================
     // ADC
-    // ------------------------------
+    // ======================================================
 
     analogReadResolution(12);
-    analogSetPinAttenuation(MQ6_PIN, ADC_11db);
 
-    // ------------------------------
-    // Sensors
-    // ------------------------------
+    analogSetPinAttenuation(
+        MQ6_PIN,
+        ADC_11db
+    );
+
+
+    // ======================================================
+    // DHT11
+    // ======================================================
 
     dht.begin();
 
-    // ------------------------------
-    // Servo
-    // ------------------------------
+
+    // ======================================================
+    // SERVO
+    // ======================================================
 
     gasServo.setPeriodHertz(50);
-    gasServo.attach(SERVO_PIN, 500, 2400);
-    gasServo.write(SERVO_NORMAL_ANGLE);
 
-    // ------------------------------
+    gasServo.attach(
+        SERVO_PIN,
+        500,
+        2400
+    );
+
+    servoAngle =
+        SERVO_NORMAL_ANGLE;
+
+    manualServoAngle =
+        SERVO_NORMAL_ANGLE;
+
+    gasServo.write(
+        servoAngle
+    );
+
+
+    // ======================================================
     // OLED
-    // ------------------------------
+    // ======================================================
 
-    Wire.begin(OLED_SDA, OLED_SCL);
+    Wire.begin(
+        OLED_SDA,
+        OLED_SCL
+    );
 
-    if (!display.begin(SSD1306_SWITCHCAPVCC, OLED_ADDRESS))
+
+    if (
+        !display.begin(
+            SSD1306_SWITCHCAPVCC,
+            OLED_ADDRESS
+        )
+    )
     {
-        Serial.println("ERROR: OLED initialization failed.");
+        Serial.println(
+            "ERROR: OLED initialization failed."
+        );
     }
     else
     {
         display.clearDisplay();
+
         display.setTextSize(1);
-        display.setTextColor(SSD1306_WHITE);
-        display.setCursor(0, 0);
-        display.println("LPG SECURITY");
-        display.setCursor(0, 16);
-        display.println("SYSTEM STARTING...");
+
+        display.setTextColor(
+            SSD1306_WHITE
+        );
+
+        display.setCursor(
+            0,
+            0
+        );
+
+        display.println(
+            "LPG SECURITY"
+        );
+
+        display.setCursor(
+            0,
+            16
+        );
+
+        display.println(
+            "SYSTEM STARTING..."
+        );
+
         display.display();
     }
 
-    // ------------------------------
-    // Blynk configuration
-    // ------------------------------
 
-    // Configure the Blynk server once, even if Wi-Fi is initially unavailable.
-    Blynk.config(BLYNK_AUTH_TOKEN);
+    // ======================================================
+    // BLYNK CONFIGURATION
+    // ======================================================
 
-    // ------------------------------
-    // Start Wi-Fi WITHOUT BLOCKING
-    // ------------------------------
+    Blynk.config(
+        BLYNK_AUTH_TOKEN
+    );
 
-    WiFi.mode(WIFI_STA);
-    WiFi.setAutoReconnect(true);
-    WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
 
-    Serial.println("Wi-Fi connection started.");
+    // ======================================================
+    // WIFI
+    //
+    // NON-BLOCKING:
+    // Local safety logic starts immediately.
+    // ======================================================
 
-    // ------------------------------
-    // Local system starts immediately.
-    // Safety logic must not wait for Wi-Fi.
-    // ------------------------------
+    WiFi.mode(
+        WIFI_STA
+    );
+
+    WiFi.setAutoReconnect(
+        true
+    );
+
+    WiFi.begin(
+        WIFI_SSID,
+        WIFI_PASSWORD
+    );
+
+
+    Serial.println(
+        "Wi-Fi connection started."
+    );
+
+
+    // ======================================================
+    // INITIAL LOCAL SENSOR STATE
+    // ======================================================
 
     readFastSensors();
+
     readDHT();
-    evaluateEmergencyState();
 
-    // ------------------------------
-    // Timers
-    // ------------------------------
+    evaluateSystemState();
 
-    timer.setInterval(200L, readFastSensors);
-    timer.setInterval(2000L, readDHT);
-    timer.setInterval(2000L, sendBlynkData);
-    timer.setInterval(500L, updateOLED);
-    timer.setInterval(100L, updateLEDs);
-    timer.setInterval(5000L, maintainConnections);
 
-    Serial.println("Local safety system started.");
-    Serial.println("========================================");
+    // ======================================================
+    // TIMERS
+    // ======================================================
+
+    // MQ-6 + Flame
+    timer.setInterval(
+        200L,
+        readFastSensors
+    );
+
+
+    // DHT11
+    timer.setInterval(
+        2000L,
+        readDHT
+    );
+
+
+    // Blynk telemetry
+    timer.setInterval(
+        2000L,
+        sendBlynkData
+    );
+
+
+    // OLED
+    timer.setInterval(
+        500L,
+        updateOLED
+    );
+
+
+    // LED management
+    timer.setInterval(
+        100L,
+        updateLEDs
+    );
+
+
+    // Wi-Fi / Blynk maintenance
+    timer.setInterval(
+        5000L,
+        maintainConnections
+    );
+
+
+    Serial.println(
+        "Local system started."
+    );
+
+    Serial.println(
+        "========================================"
+    );
 }
+
 
 // ==========================================================
 // LOOP
@@ -275,40 +826,103 @@ void setup()
 
 void loop()
 {
-    // Blynk communication when Wi-Fi is available.
-    if (WiFi.status() == WL_CONNECTED)
+    // ------------------------------------------------------
+    // Blynk
+    // ------------------------------------------------------
+
+    if (
+        WiFi.status() ==
+        WL_CONNECTED
+    )
     {
         Blynk.run();
     }
 
+
+    // ------------------------------------------------------
+    // Timed tasks
+    // ------------------------------------------------------
+
     timer.run();
 }
 
+
 // ==========================================================
-// READ MQ-6 + FLAME
+// READ FAST SENSORS
 // ==========================================================
 
 void readFastSensors()
 {
-    gasRaw = analogRead(MQ6_PIN);
+    // ======================================================
+    // MQ-6
+    // ======================================================
 
-    if (gasFiltered == 0.0f)
+    gasRaw =
+        analogRead(
+            MQ6_PIN
+        );
+
+
+    // ------------------------------------------------------
+    // Simple moving filter
+    // ------------------------------------------------------
+
+    if (
+        gasFiltered == 0.0f
+    )
     {
-        gasFiltered = gasRaw;
+        gasFiltered =
+            gasRaw;
     }
     else
     {
-        gasFiltered = (0.7f * gasFiltered) + (0.3f * gasRaw);
+        gasFiltered =
+            (
+                0.7f *
+                gasFiltered
+            )
+            +
+            (
+                0.3f *
+                gasRaw
+            );
     }
 
-    const int flameState = digitalRead(FLAME_PIN);
 
-    flameDetected = FLAME_ACTIVE_LOW
-                        ? (flameState == LOW)
-                        : (flameState == HIGH);
+    // ======================================================
+    // FLAME
+    // ======================================================
 
-    evaluateEmergencyState();
+    const int flameState =
+        digitalRead(
+            FLAME_PIN
+        );
+
+
+    if (
+        FLAME_ACTIVE_LOW
+    )
+    {
+        flameDetected =
+            (
+                flameState ==
+                LOW
+            );
+    }
+    else
+    {
+        flameDetected =
+            (
+                flameState ==
+                HIGH
+            );
+    }
+
+
+    // Update system
+    evaluateSystemState();
 }
+
 
 // ==========================================================
 // READ DHT11
@@ -316,125 +930,349 @@ void readFastSensors()
 
 void readDHT()
 {
-    const float newHumidity = dht.readHumidity();
-    const float newTemperature = dht.readTemperature();
+    const float newHumidity =
+        dht.readHumidity();
 
-    if (!isnan(newHumidity))
+    const float newTemperature =
+        dht.readTemperature();
+
+
+    if (
+        !isnan(newHumidity)
+    )
     {
-        humidity = newHumidity;
+        humidity =
+            newHumidity;
     }
 
-    if (!isnan(newTemperature))
+
+    if (
+        !isnan(newTemperature)
+    )
     {
-        temperature = newTemperature;
+        temperature =
+            newTemperature;
     }
 
-    evaluateEmergencyState();
+
+    // Update system
+    evaluateSystemState();
 }
 
+
 // ==========================================================
-// EMERGENCY DECISION
+// SYSTEM STATE EVALUATION
 // ==========================================================
 
-void evaluateEmergencyState()
+void evaluateSystemState()
 {
-    gasAlarm = (gasFiltered >= GAS_THRESHOLD);
+    // ======================================================
+    // SENSOR CONDITIONS
+    // ======================================================
 
-    temperatureAlarm = !isnan(temperature) &&
-                       (temperature >= TEMPERATURE_THRESHOLD);
+    gasAlarm =
+        (
+            gasFiltered >=
+            GAS_THRESHOLD
+        );
 
-    // ANY ONE alarm source activates emergency mode.
-    emergencyMode = gasAlarm || flameDetected || temperatureAlarm;
 
-    // Detect NORMAL -> EMERGENCY exactly once.
-    if (emergencyMode && !previousEmergencyMode)
+    temperatureAlarm =
+        (
+            !isnan(temperature) &&
+            temperature >=
+            TEMPERATURE_THRESHOLD
+        );
+
+
+    // ======================================================
+    // INDIVIDUAL ALARM COMBINATION
+    // ======================================================
+
+    sensorEmergency =
+        gasAlarm ||
+        flameDetected ||
+        temperatureAlarm;
+
+
+    // ======================================================
+    // EFFECTIVE EMERGENCY MODE
+    //
+    // Testing Mode intentionally overrides automatic
+    // emergency actuation.
+    // ======================================================
+
+    if (testingMode)
+    {
+        emergencyMode = false;
+    }
+    else
+    {
+        emergencyMode =
+            sensorEmergency;
+    }
+
+
+    // ======================================================
+    // NORMAL -> EMERGENCY
+    //
+    // Only possible outside Testing Mode.
+    // ======================================================
+
+    if (
+        emergencyMode &&
+        !previousEmergencyMode
+    )
     {
         Serial.println();
-        Serial.println("!!! EMERGENCY ACTIVATED !!!");
-        Serial.print("CAUSE: ");
-        Serial.println(getAlarmCause());
+        Serial.println(
+            "!!! EMERGENCY ACTIVATED !!!"
+        );
 
-        // Request one Blynk notification.
-        // If offline, it remains pending until Blynk is available.
+        Serial.print(
+            "Cause: "
+        );
+
+        Serial.println(
+            getAlarmCause()
+        );
+
+
+        // One notification per activation.
         eventPending = true;
     }
 
-    // Detect EMERGENCY -> NORMAL.
-    if (!emergencyMode && previousEmergencyMode)
+
+    // ======================================================
+    // EMERGENCY -> NORMAL
+    // ======================================================
+
+    if (
+        !emergencyMode &&
+        previousEmergencyMode
+    )
     {
-        Serial.println("Emergency cleared.");
+        Serial.println(
+            "Emergency cleared."
+        );
     }
 
-    previousEmergencyMode = emergencyMode;
 
+    previousEmergencyMode =
+        emergencyMode;
+
+
+    // Apply the appropriate outputs.
     applyOutputs();
 }
 
+
 // ==========================================================
-// PHYSICAL OUTPUT CONTROL
+// OUTPUT CONTROL
 // ==========================================================
 
 void applyOutputs()
 {
-    if (emergencyMode)
+    // ======================================================
+    // TESTING MODE
+    // ======================================================
+
+    if (testingMode)
     {
-        // ----------------------------------------------
-        // RELAY OFF
-        // GPIO HIGH -> BC547 ON -> Relay IN LOW
-        // ----------------------------------------------
-        digitalWrite(RELAY_PIN, HIGH);
-        relayState = false;
+        // --------------------------------------------------
+        // MANUAL RELAY
+        //
+        // Single BC547 inverter:
+        //
+        // manualRelay = true
+        // -> GPIO LOW
+        // -> BC547 OFF
+        // -> Relay IN pulled HIGH
+        // -> Relay ON
+        // --------------------------------------------------
 
-        // ----------------------------------------------
-        // FAN ON (inverted driver)
-        // ----------------------------------------------
-        digitalWrite(FAN_CTRL_PIN, LOW);
-        fanState = true;
+        digitalWrite(
+            RELAY_PIN,
+            manualRelay ?
+            LOW :
+            HIGH
+        );
 
-        // ----------------------------------------------
-        // SERVO -> 0 deg
-        // ----------------------------------------------
-        if (servoAngle != SERVO_EMERGENCY_ANGLE)
+        relayState =
+            manualRelay;
+
+
+        // --------------------------------------------------
+        // MANUAL FAN
+        //
+        // Inverted driver:
+        // LOW = ON
+        // --------------------------------------------------
+
+        digitalWrite(
+            FAN_CTRL_PIN,
+            manualFan ?
+            LOW :
+            HIGH
+        );
+
+        fanState =
+            manualFan;
+
+
+        // --------------------------------------------------
+        // MANUAL SERVO
+        // --------------------------------------------------
+
+        if (
+            servoAngle !=
+            manualServoAngle
+        )
         {
-            servoAngle = SERVO_EMERGENCY_ANGLE;
-            gasServo.write(servoAngle);
+            servoAngle =
+                manualServoAngle;
+
+            gasServo.write(
+                servoAngle
+            );
         }
 
-        // ----------------------------------------------
+
+        // --------------------------------------------------
+        // MANUAL BUZZER
+        // --------------------------------------------------
+
+        digitalWrite(
+            BUZZER_PIN,
+            manualBuzzer ?
+            HIGH :
+            LOW
+        );
+
+
+        // Emergency outputs remain OFF.
+        // The dashboard controls are authoritative
+        // while Testing Mode is active.
+
+        return;
+    }
+
+
+    // ======================================================
+    // AUTOMATIC SECURITY MODE
+    // ======================================================
+
+    if (emergencyMode)
+    {
+        // --------------------------------------------------
+        // RELAY OFF
+        // --------------------------------------------------
+
+        digitalWrite(
+            RELAY_PIN,
+            HIGH
+        );
+
+        relayState =
+            false;
+
+
+        // --------------------------------------------------
+        // FAN ON
+        // --------------------------------------------------
+
+        digitalWrite(
+            FAN_CTRL_PIN,
+            LOW
+        );
+
+        fanState =
+            true;
+
+
+        // --------------------------------------------------
+        // SERVO -> 0°
+        // --------------------------------------------------
+
+        if (
+            servoAngle !=
+            SERVO_EMERGENCY_ANGLE
+        )
+        {
+            servoAngle =
+                SERVO_EMERGENCY_ANGLE;
+
+            gasServo.write(
+                servoAngle
+            );
+        }
+
+
+        // --------------------------------------------------
         // BUZZER ON
-        // ----------------------------------------------
-        digitalWrite(BUZZER_PIN, HIGH);
+        // --------------------------------------------------
+
+        digitalWrite(
+            BUZZER_PIN,
+            HIGH
+        );
     }
     else
     {
-        // ----------------------------------------------
-        // RELAY ON
-        // GPIO LOW -> BC547 OFF -> 10k pulls IN HIGH
-        // ----------------------------------------------
-        digitalWrite(RELAY_PIN, LOW);
-        relayState = true;
+        // --------------------------------------------------
+        // NORMAL
+        // --------------------------------------------------
 
-        // ----------------------------------------------
-        // FAN OFF
-        // ----------------------------------------------
-        digitalWrite(FAN_CTRL_PIN, HIGH);
-        fanState = false;
+        // Relay ON:
+        // GPIO LOW -> BC547 OFF
+        // -> collector pulled HIGH
+        // -> relay IN HIGH
 
-        // ----------------------------------------------
-        // SERVO -> 90 deg
-        // ----------------------------------------------
-        if (servoAngle != SERVO_NORMAL_ANGLE)
+        digitalWrite(
+            RELAY_PIN,
+            LOW
+        );
+
+        relayState =
+            true;
+
+
+        // Fan OFF
+
+        digitalWrite(
+            FAN_CTRL_PIN,
+            HIGH
+        );
+
+        fanState =
+            false;
+
+
+        // Servo -> 90°
+
+        if (
+            servoAngle !=
+            SERVO_NORMAL_ANGLE
+        )
         {
-            servoAngle = SERVO_NORMAL_ANGLE;
-            gasServo.write(servoAngle);
+            servoAngle =
+                SERVO_NORMAL_ANGLE;
+
+            gasServo.write(
+                servoAngle
+            );
         }
 
-        // ----------------------------------------------
-        // BUZZER OFF
-        // ----------------------------------------------
-        digitalWrite(BUZZER_PIN, LOW);
+
+        // Buzzer OFF
+
+        digitalWrite(
+            BUZZER_PIN,
+            LOW
+        );
     }
 }
+
 
 // ==========================================================
 // LED MANAGEMENT
@@ -442,54 +1280,188 @@ void applyOutputs()
 
 void updateLEDs()
 {
-    const unsigned long now = millis();
+    const unsigned long now =
+        millis();
 
-    if (emergencyMode)
+
+    // ======================================================
+    // TESTING MODE
+    // ======================================================
+
+    if (testingMode)
     {
-        // Emergency always overrides Wi-Fi status LED.
-        digitalWrite(GREEN_LED_PIN, LOW);
+        // --------------------------------------------------
+        // Green LED is still the Wi-Fi indicator.
+        // --------------------------------------------------
 
-        if (now - lastEmergencyFlash >= 400)
+        digitalWrite(
+            RED_LED_PIN,
+            LOW
+        );
+
+        digitalWrite(
+            BLUE_LED_PIN,
+            LOW
+        );
+
+
+        if (
+            WiFi.status() ==
+            WL_CONNECTED
+        )
         {
-            lastEmergencyFlash = now;
-            emergencyFlashState = !emergencyFlashState;
+            // Wi-Fi connected -> solid green.
 
-            if (emergencyFlashState)
+            digitalWrite(
+                GREEN_LED_PIN,
+                HIGH
+            );
+
+            greenLedState =
+                true;
+        }
+        else
+        {
+            // Wi-Fi not connected -> blinking green.
+
+            if (
+                now -
+                lastGreenBlink >=
+                500
+            )
             {
-                digitalWrite(RED_LED_PIN, HIGH);
-                digitalWrite(BLUE_LED_PIN, LOW);
-            }
-            else
-            {
-                digitalWrite(RED_LED_PIN, LOW);
-                digitalWrite(BLUE_LED_PIN, HIGH);
+                lastGreenBlink =
+                    now;
+
+                greenLedState =
+                    !greenLedState;
+
+                digitalWrite(
+                    GREEN_LED_PIN,
+                    greenLedState
+                );
             }
         }
 
         return;
     }
 
-    // Normal mode: emergency LEDs off.
-    digitalWrite(RED_LED_PIN, LOW);
-    digitalWrite(BLUE_LED_PIN, LOW);
 
-    if (WiFi.status() == WL_CONNECTED)
+    // ======================================================
+    // EMERGENCY
+    // ======================================================
+
+    if (emergencyMode)
     {
-        // Wi-Fi connected -> GREEN SOLID ON.
-        digitalWrite(GREEN_LED_PIN, HIGH);
-        greenLedState = true;
+        // Green OFF
+
+        digitalWrite(
+            GREEN_LED_PIN,
+            LOW
+        );
+
+
+        // Red / Blue alternating
+
+        if (
+            now -
+            lastEmergencyFlash >=
+            400
+        )
+        {
+            lastEmergencyFlash =
+                now;
+
+            emergencyFlashState =
+                !emergencyFlashState;
+
+
+            if (
+                emergencyFlashState
+            )
+            {
+                digitalWrite(
+                    RED_LED_PIN,
+                    HIGH
+                );
+
+                digitalWrite(
+                    BLUE_LED_PIN,
+                    LOW
+                );
+            }
+            else
+            {
+                digitalWrite(
+                    RED_LED_PIN,
+                    LOW
+                );
+
+                digitalWrite(
+                    BLUE_LED_PIN,
+                    HIGH
+                );
+            }
+        }
+
+        return;
+    }
+
+
+    // ======================================================
+    // NORMAL
+    // ======================================================
+
+    digitalWrite(
+        RED_LED_PIN,
+        LOW
+    );
+
+    digitalWrite(
+        BLUE_LED_PIN,
+        LOW
+    );
+
+
+    if (
+        WiFi.status() ==
+        WL_CONNECTED
+    )
+    {
+        // Wi-Fi connected -> SOLID GREEN.
+
+        digitalWrite(
+            GREEN_LED_PIN,
+            HIGH
+        );
+
+        greenLedState =
+            true;
     }
     else
     {
-        // Connecting / disconnected -> GREEN BLINKING.
-        if (now - lastGreenBlink >= 500)
+        // Wi-Fi connecting/disconnected -> BLINK GREEN.
+
+        if (
+            now -
+            lastGreenBlink >=
+            500
+        )
         {
-            lastGreenBlink = now;
-            greenLedState = !greenLedState;
-            digitalWrite(GREEN_LED_PIN, greenLedState);
+            lastGreenBlink =
+                now;
+
+            greenLedState =
+                !greenLedState;
+
+            digitalWrite(
+                GREEN_LED_PIN,
+                greenLedState
+            );
         }
     }
 }
+
 
 // ==========================================================
 // OLED
@@ -497,73 +1469,240 @@ void updateLEDs()
 
 void updateOLED()
 {
-    if (millis() - lastOLEDUpdate < 400)
+    if (
+        millis() -
+        lastOLEDUpdate <
+        400
+    )
     {
         return;
     }
 
-    lastOLEDUpdate = millis();
+    lastOLEDUpdate =
+        millis();
+
 
     display.clearDisplay();
+
     display.setTextSize(1);
-    display.setTextColor(SSD1306_WHITE);
 
-    display.setCursor(0, 0);
-    display.println("LPG SECURITY");
+    display.setTextColor(
+        SSD1306_WHITE
+    );
 
-    display.setCursor(115, 0);
-    display.print(WiFi.status() == WL_CONNECTED ? "W" : "-");
 
-    display.setCursor(0, 10);
-    display.println(emergencyMode ? "STATUS: EMERGENCY" : "STATUS: NORMAL");
+    // ======================================================
+    // TITLE
+    // ======================================================
 
-    display.setCursor(0, 20);
-    display.print("GAS : ");
-    display.println((int)gasFiltered);
+    display.setCursor(
+        0,
+        0
+    );
 
-    display.setCursor(0, 30);
-    display.print("TEMP: ");
+    display.println(
+        "LPG SECURITY"
+    );
 
-    if (!isnan(temperature))
+
+    // Wi-Fi indicator
+
+    display.setCursor(
+        115,
+        0
+    );
+
+    display.print(
+        WiFi.status() ==
+        WL_CONNECTED ?
+        "W" :
+        "-"
+    );
+
+
+    // ======================================================
+    // STATUS
+    // ======================================================
+
+    display.setCursor(
+        0,
+        10
+    );
+
+
+    if (testingMode)
     {
-        display.print(temperature, 1);
-        display.println(" C");
+        display.println(
+            "STATUS: TEST MODE"
+        );
+    }
+    else if (emergencyMode)
+    {
+        display.println(
+            "STATUS: EMERGENCY"
+        );
     }
     else
     {
-        display.println("N/A");
+        display.println(
+            "STATUS: NORMAL"
+        );
     }
 
-    display.setCursor(0, 40);
-    display.print("HUM : ");
 
-    if (!isnan(humidity))
+    // ======================================================
+    // GAS
+    // ======================================================
+
+    display.setCursor(
+        0,
+        20
+    );
+
+    display.print(
+        "GAS : "
+    );
+
+    display.println(
+        (int)gasFiltered
+    );
+
+
+    // ======================================================
+    // TEMPERATURE
+    // ======================================================
+
+    display.setCursor(
+        0,
+        30
+    );
+
+    display.print(
+        "TEMP: "
+    );
+
+
+    if (
+        !isnan(temperature)
+    )
     {
-        display.print(humidity, 0);
-        display.println(" %");
+        display.print(
+            temperature,
+            1
+        );
+
+        display.println(
+            " C"
+        );
     }
     else
     {
-        display.println("N/A");
+        display.println(
+            "N/A"
+        );
     }
 
-    display.setCursor(74, 40);
-    display.print("F:");
-    display.print(flameDetected ? "YES" : "NO");
 
-    display.setCursor(0, 50);
-    display.print("R:");
-    display.print(relayState ? "ON " : "OFF");
+    // ======================================================
+    // HUMIDITY
+    // ======================================================
 
-    display.print(" F:");
-    display.print(fanState ? "ON " : "OFF");
+    display.setCursor(
+        0,
+        40
+    );
 
-    display.print(" S:");
-    display.print(servoAngle);
-    display.print("d");
+    display.print(
+        "HUM : "
+    );
+
+
+    if (
+        !isnan(humidity)
+    )
+    {
+        display.print(
+            humidity,
+            0
+        );
+
+        display.println(
+            " %"
+        );
+    }
+    else
+    {
+        display.println(
+            "N/A"
+        );
+    }
+
+
+    // ======================================================
+    // FLAME
+    // ======================================================
+
+    display.setCursor(
+        74,
+        40
+    );
+
+    display.print(
+        "F:"
+    );
+
+    display.print(
+        flameDetected ?
+        "YES" :
+        "NO"
+    );
+
+
+    // ======================================================
+    // OUTPUT STATUS
+    // ======================================================
+
+    display.setCursor(
+        0,
+        50
+    );
+
+    display.print(
+        "R:"
+    );
+
+    display.print(
+        relayState ?
+        "ON " :
+        "OFF"
+    );
+
+    display.print(
+        " F:"
+    );
+
+    display.print(
+        fanState ?
+        "ON " :
+        "OFF"
+    );
+
+    display.print(
+        " S:"
+    );
+
+    display.print(
+        servoAngle
+    );
+
+    display.print(
+        "d"
+    );
+
 
     display.display();
 }
+
 
 // ==========================================================
 // BLYNK TELEMETRY
@@ -571,33 +1710,125 @@ void updateOLED()
 
 void sendBlynkData()
 {
-    if (!Blynk.connected())
+    if (
+        !Blynk.connected()
+    )
     {
         return;
     }
 
-    Blynk.virtualWrite(V0, gasRaw);
-    Blynk.virtualWrite(V1, (int)gasFiltered);
 
-    if (!isnan(temperature))
+    // ------------------------------------------------------
+    // Sensor data
+    // ------------------------------------------------------
+
+    Blynk.virtualWrite(
+        V0,
+        gasRaw
+    );
+
+    Blynk.virtualWrite(
+        V1,
+        (int)gasFiltered
+    );
+
+
+    if (
+        !isnan(temperature)
+    )
     {
-        Blynk.virtualWrite(V2, temperature);
+        Blynk.virtualWrite(
+            V2,
+            temperature
+        );
     }
 
-    if (!isnan(humidity))
+
+    if (
+        !isnan(humidity)
+    )
     {
-        Blynk.virtualWrite(V3, humidity);
+        Blynk.virtualWrite(
+            V3,
+            humidity
+        );
     }
 
-    Blynk.virtualWrite(V4, flameDetected ? 1 : 0);
-    Blynk.virtualWrite(V5, emergencyMode ? 1 : 0);
-    Blynk.virtualWrite(V6, relayState ? 1 : 0);
-    Blynk.virtualWrite(V7, fanState ? 1 : 0);
-    Blynk.virtualWrite(V8, servoAngle);
-    Blynk.virtualWrite(V9, WiFi.status() == WL_CONNECTED ? 1 : 0);
-    Blynk.virtualWrite(V10, getAlarmCause());
-    Blynk.virtualWrite(V11, Blynk.connected() ? 1 : 0);
+
+    // Fire Detection
+    Blynk.virtualWrite(
+        V4,
+        flameDetected ?
+        1 :
+        0
+    );
+
+
+    // Effective emergency mode
+    Blynk.virtualWrite(
+        V5,
+        emergencyMode ?
+        1 :
+        0
+    );
+
+
+    // Actual output states
+    Blynk.virtualWrite(
+        V6,
+        relayState ?
+        1 :
+        0
+    );
+
+    Blynk.virtualWrite(
+        V7,
+        fanState ?
+        1 :
+        0
+    );
+
+    Blynk.virtualWrite(
+        V8,
+        servoAngle
+    );
+
+
+    // Wi-Fi status
+    Blynk.virtualWrite(
+        V9,
+        WiFi.status() ==
+        WL_CONNECTED ?
+        1 :
+        0
+    );
+
+
+    // Alarm cause
+    Blynk.virtualWrite(
+        V10,
+        getAlarmCause()
+    );
+
+
+    // Blynk connection state
+    Blynk.virtualWrite(
+        V11,
+        Blynk.connected() ?
+        1 :
+        0
+    );
+
+
+    // LPG leakage
+    Blynk.virtualWrite(
+        V17,
+        gasAlarm ?
+        1 :
+        0
+    );
 }
+
 
 // ==========================================================
 // CONNECTION MAINTENANCE
@@ -605,84 +1836,159 @@ void sendBlynkData()
 
 void maintainConnections()
 {
-    // ------------------------------------------------------
-    // Wi-Fi disconnected
-    // ------------------------------------------------------
+    // ======================================================
+    // WIFI
+    // ======================================================
 
-    if (WiFi.status() != WL_CONNECTED)
+    if (
+        WiFi.status() !=
+        WL_CONNECTED
+    )
     {
-        if (millis() - lastWifiReconnectAttempt >= 10000)
+        if (
+            millis() -
+            lastWifiReconnectAttempt >=
+            10000
+        )
         {
-            lastWifiReconnectAttempt = millis();
+            lastWifiReconnectAttempt =
+                millis();
 
-            Serial.println("Attempting Wi-Fi reconnect...");
+
+            Serial.println(
+                "Attempting Wi-Fi reconnect..."
+            );
+
 
             WiFi.disconnect();
-            WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
+
+            WiFi.begin(
+                WIFI_SSID,
+                WIFI_PASSWORD
+            );
         }
+
 
         return;
     }
 
-    // ------------------------------------------------------
-    // Wi-Fi connected; connect Blynk if needed.
-    // ------------------------------------------------------
 
-    if (!Blynk.connected())
+    // ======================================================
+    // BLYNK
+    // ======================================================
+
+    if (
+        !Blynk.connected()
+    )
     {
-        if (millis() - lastBlynkReconnectAttempt >= 10000)
+        if (
+            millis() -
+            lastBlynkReconnectAttempt >=
+            10000
+        )
         {
-            lastBlynkReconnectAttempt = millis();
+            lastBlynkReconnectAttempt =
+                millis();
 
-            Serial.println("Attempting Blynk reconnect...");
-            Blynk.connect(3000);
+
+            Serial.println(
+                "Attempting Blynk reconnect..."
+            );
+
+
+            Blynk.connect(
+                3000
+            );
         }
+
 
         return;
     }
 
-    // ------------------------------------------------------
-    // Send pending emergency event once Blynk is online.
-    // ------------------------------------------------------
 
-    if (eventPending)
+    // ======================================================
+    // PENDING EMERGENCY EVENT
+    //
+    // Never send while Testing Mode is active.
+    // ======================================================
+
+    if (
+        eventPending &&
+        !testingMode &&
+        emergencyMode
+    )
     {
         triggerEmergencyEvent();
-        eventPending = false;
+
+        eventPending =
+            false;
     }
 }
 
+
 // ==========================================================
-// BLYNK EVENT
+// BLYNK EMERGENCY EVENT
 // ==========================================================
 
 void triggerEmergencyEvent()
 {
-    String message = "LPG SECURITY EMERGENCY";
+    String message =
+        "LPG SECURITY EMERGENCY";
 
-    message += " | Cause: ";
-    message += getAlarmCause();
 
-    message += " | Gas: ";
-    message += String((int)gasFiltered);
+    message +=
+        " | Cause: ";
 
-    message += " | Temp: ";
+    message +=
+        getAlarmCause();
 
-    if (!isnan(temperature))
+
+    message +=
+        " | Gas: ";
+
+    message +=
+        String(
+            (int)gasFiltered
+        );
+
+
+    message +=
+        " | Temp: ";
+
+
+    if (
+        !isnan(temperature)
+    )
     {
-        message += String(temperature, 1);
-        message += " C";
+        message +=
+            String(
+                temperature,
+                1
+            );
+
+        message +=
+            " C";
     }
     else
     {
-        message += "N/A";
+        message +=
+            "N/A";
     }
 
-    Serial.println("Sending Blynk emergency event...");
 
-    // Must match the Blynk Event Code exactly.
-    Blynk.logEvent("lpg_emergency", message);
+    Serial.println(
+        "Sending Blynk emergency event..."
+    );
+
+
+    // Must match Blynk Event Code exactly.
+
+    Blynk.logEvent(
+        "lpg_emergency",
+        message
+    );
 }
+
 
 // ==========================================================
 // ALARM CAUSE
@@ -690,37 +1996,53 @@ void triggerEmergencyEvent()
 
 String getAlarmCause()
 {
-    if (!emergencyMode)
+    String cause = "";
+
+
+    if (gasAlarm)
+    {
+        cause +=
+            "GAS";
+    }
+
+
+    if (flameDetected)
+    {
+        if (
+            cause.length() > 0
+        )
+        {
+            cause +=
+                "+";
+        }
+
+        cause +=
+            "FLAME";
+    }
+
+
+    if (temperatureAlarm)
+    {
+        if (
+            cause.length() > 0
+        )
+        {
+            cause +=
+                "+";
+        }
+
+        cause +=
+            "TEMP";
+    }
+
+
+    if (
+        cause.length() == 0
+    )
     {
         return "NONE";
     }
 
-    String cause = "";
-
-    if (gasAlarm)
-    {
-        cause += "GAS";
-    }
-
-    if (flameDetected)
-    {
-        if (cause.length() > 0)
-        {
-            cause += "+";
-        }
-
-        cause += "FLAME";
-    }
-
-    if (temperatureAlarm)
-    {
-        if (cause.length() > 0)
-        {
-            cause += "+";
-        }
-
-        cause += "TEMP";
-    }
 
     return cause;
 }
