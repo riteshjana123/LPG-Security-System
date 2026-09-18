@@ -1,0 +1,11 @@
+#pragma once
+
+// Copy this file to config.h and replace these placeholders.
+// NEVER commit the real config.h file.
+
+#define BLYNK_TEMPLATE_ID   "YOUR_TEMPLATE_ID"
+#define BLYNK_TEMPLATE_NAME "LPG Security System"
+#define BLYNK_AUTH_TOKEN    "YOUR_BLYNK_AUTH_TOKEN"
+
+const char WIFI_SSID[] = "YOUR_WIFI_SSID";
+const char WIFI_PASSWORD[] = "YOUR_WIFI_PASSWORD";
