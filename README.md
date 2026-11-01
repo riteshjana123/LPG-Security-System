@@ -256,9 +256,17 @@ Then replace the placeholders with your own Wi-Fi and Blynk credentials.
 5. Upload.
 6. Open Serial Monitor at **115200 baud**.
 
-## Project Media
+## Real Hardware Photos
 
-Real hardware photographs, Serial Monitor output, Blynk dashboard, and Datastream screenshots will be added as the prototype documentation is completed.
+These photographs document the assembled prototype, including the front-panel layout, internal wiring, sensor arrangement, and live OLED readings.
+
+| Complete prototype | Front-panel view |
+|---|---|
+| ![Complete LPG security system prototype](docs/hardware-photos/lpg-system-overview.jpg) | ![Front view of the LPG security system](docs/hardware-photos/lpg-system-front-view.jpg) |
+
+| Internal wiring | Live OLED status |
+|---|---|
+| ![Internal hardware wiring and controller assembly](docs/hardware-photos/internal-hardware-wiring.jpg) | ![OLED display showing live sensor readings and system status](docs/hardware-photos/oled-display-live-status.jpg) |
 
 ## Testing sequence
 
@@ -330,6 +338,11 @@ LPG-Security-System/
     ├── CIRCUIT_NOTES.md
     ├── FLOWCHART.svg
     ├── LPG_FINAL_SYSTEM.png
+    └── hardware-photos/
+        ├── internal-hardware-wiring.jpg
+        ├── lpg-system-front-view.jpg
+        ├── lpg-system-overview.jpg
+        └── oled-display-live-status.jpg
     ├── LPG_SYSTEM_ARCHITECTURE.svg
     ├── RELEASE_NOTES_v1.0.0.md
     ├── RESEARCH_REPORT.md
